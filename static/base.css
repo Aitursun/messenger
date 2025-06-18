@@ -10,12 +10,19 @@ body {
 
 h1, h2 {
     text-align: center;
-    background-color: #075e54;
+    background-color: rgba(7, 94, 84, 0.85); /* полупрозрачный цвет */
     color: white;
     padding: 16px;
     border-radius: 12px;
     font-size: 22px;
     margin-bottom: 24px;
+    position: relative;
+}
+
+.icon {
+    font-size: 40px;
+    text-align: center;
+    margin-bottom: 12px;
 }
 
 ul {
@@ -62,6 +69,8 @@ p a:hover {
     padding: 12px;
     border-radius: 12px;
     margin-bottom: 16px;
+    display: flex;
+    flex-direction: column;
 }
 
 .message {
@@ -70,20 +79,21 @@ p a:hover {
     border-radius: 12px;
     max-width: 75%;
     word-wrap: break-word;
+    font-size: 16px;
 }
 
 .you {
-    text-align: right;
+    align-self: flex-end;
     background-color: #dfe3ff;
     color: #1f1f6f;
-    margin-left: auto;
+    text-align: right;
 }
 
 .them {
-    text-align: left;
+    align-self: flex-start;
     background-color: #e6f2ea;
     color: #1b5637;
-    margin-right: auto;
+    text-align: left;
 }
 
 #messageInput {
@@ -106,15 +116,111 @@ button {
     background-color: #128c7e;
     color: white;
     transition: background-color 0.3s ease;
+    width: 100%;
 }
 
 button:hover {
     background-color: #0b7266;
 }
 
+/* Отдельные стили для кнопок звонка и завершения */
+#callButton {
+    background-color: #a29bfe;
+    margin-top: 16px;
+    width: 48%;
+    margin-right: 4%;
+}
+
+#callButton:hover {
+    background-color: #8c7ae6;
+}
+
+#hangupButton {
+    background-color: #ff7675;
+    margin-top: 16px;
+    width: 48%;
+}
+
+#hangupButton:hover {
+    background-color: #d63031;
+}
+
 audio {
     display: block;
     margin: 16px auto;
+}
+
+.form {
+    margin: 32px auto;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.form input {
+    border: none;
+    margin: 12px 0;
+    font-size: 16px;
+    color: #333;
+    width: 90%;
+    max-width: 400px;
+    border-radius: 8px;
+    padding: 10px 16px;
+    background-color: #f0f0f5;
+    outline: none;
+    text-align: center;
+}
+
+.form button {
+    margin-top: 20px;
+    font-size: 16px;
+    width: 60%;
+    max-width: 250px;
+    border-radius: 8px;
+    padding: 10px 16px;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.form button.login-btn {
+    background-color: #84d9a1;
+    color: #10492f;
+}
+
+.form button.login-btn:hover {
+    background-color: #70c28c;
+}
+
+.form button.register-btn {
+    background-color: #ffeaa7;
+    color: #6b5600;
+}
+
+.form button.register-btn:hover {
+    background-color: #ffdd75;
+}
+
+.text {
+    width: 100%;
+    text-align: center;
+    margin-top: 32px;
+}
+
+.text p {
+    text-align: center;
+    color: #555;
+}
+
+.text a {
+    color: #075e54;
+    text-decoration: none;
+    font-weight: bold;
+}
+
+.text a:hover {
+    text-decoration: underline;
 }
 
 @media (max-width: 480px) {
@@ -129,5 +235,18 @@ audio {
 
     button, #messageInput {
         width: 100%;
+    }
+
+    #callButton, #hangupButton {
+        width: 100%;
+        margin: 10px 0 0 0;
+    }
+
+    .form button {
+        width: 80%;
+    }
+
+    .form input {
+        width: 95%;
     }
 }
