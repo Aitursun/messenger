@@ -15,7 +15,7 @@
 
     <div class="chat-box" id="chatBox">
         {% for message in messages %}
-            <div class="message {{ 'you' if message.sender_id == current_user.id else 'them' }}">
+                <div class="message {{ 'you' if message.sender_id|string == current_user.id|string else 'them' }}">
                 <strong>{{ message.sender.username }}:</strong> {{ message.body }}
             </div>
         {% endfor %}
