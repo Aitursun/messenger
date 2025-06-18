@@ -1,3 +1,4 @@
+css
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background-color: #f9f9fb;
@@ -10,7 +11,7 @@ body {
 
 h1, h2 {
     text-align: center;
-    background-color: rgba(7, 94, 84, 0.85); /* полупрозрачный цвет */
+    background-color: rgba(7, 94, 84, 0.7); /* чуть более прозрачный */
     color: white;
     padding: 16px;
     border-radius: 12px;
@@ -123,7 +124,7 @@ button:hover {
     background-color: #0b7266;
 }
 
-/* Отдельные стили для кнопок звонка и завершения */
+/* Кнопки звонка и завершения */
 #callButton {
     background-color: #a29bfe;
     margin-top: 16px;

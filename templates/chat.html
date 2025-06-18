@@ -1,35 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-8" />
     <title>Chat with {{ other_user.username }}</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 30px;
-        }
-        .chat-box {
-            border: 1px solid #ccc;
-            height: 300px;
-            overflow-y: auto;
-            padding: 10px;
-        }
-        .message {
-            margin: 5px 0;
-        }
-        .you {
-            text-align: right;
-            color: blue;
-        }
-        .them {
-            text-align: left;
-            color: green;
-        }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/chat.css') }}" />
 </head>
 <body>
+
     <h2>Chat with {{ other_user.username }}</h2>
+
+    <p class="back-link"><a href="{{ url_for('chat') }}">Back to chats</a></p>
 
     <div class="chat-box" id="chatBox">
         {% for message in messages %}
@@ -39,12 +20,14 @@
         {% endfor %}
     </div>
 
-    <input type="text" id="messageInput" placeholder="Type your message..." autocomplete="off">
+    <input type="text" id="messageInput" placeholder="Type your message..." autocomplete="off" />
     <button id="sendBtn">Send</button>
 
-    <br><br>
-    <button id="callButton">Call</button>
-    <button id="hangupButton" disabled>Hang Up</button>
+    <div class="call-buttons">
+        <button id="callButton">Call</button>
+        <button id="hangupButton" disabled>Hang Up</button>
+    </div>
+
     <audio id="remoteAudio" autoplay></audio>
 
     <script>
@@ -162,5 +145,6 @@
             }
         });
     </script>
+
 </body>
 </html>
