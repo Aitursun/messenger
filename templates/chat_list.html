@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='base.css') }}">
+    <title>Chats</title>
+</head>
+<body>
+    <h1>Chat rooms</h1>
+
+    {% if chat_partners %}
+        <ul>
+        {% for user in chat_partners %}
+            <li>
+                <a href="{{ url_for('chat_with_user', user_id=user.id) }}">{{ user.username }}</a>
+            </li>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p>You don't have any chat rooms.</p>
+    {% endif %}
+
+    <p><a href="{{ url_for('users_list') }}">All users</a></p>
+    <p><a href="{{ url_for('logout') }}">Log out</a></p>
+</body>
+</html>
