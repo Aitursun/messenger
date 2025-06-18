@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <title>Chat with {{ other_user.username }}</title>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
 </head>
 <body>
     <h2>Chat with {{ other_user.username }}</h2>
