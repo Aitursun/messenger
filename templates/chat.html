@@ -44,12 +44,12 @@
     </div>
 
     <script>
-        // Правильное объявление переменных из Jinja2
+        // Инициализация переменных
         const socket = io();
         const userId = Number('{{ current_user.id }}');
         const recipientId = Number('{{ other_user.id }}');
         
-        // Получение элементов DOM
+        // DOM элементы
         const chatBox = document.getElementById('chatBox');
         const messageInput = document.getElementById('messageInput');
         const sendBtn = document.getElementById('sendBtn');
@@ -63,24 +63,30 @@
         const rejectCall = document.getElementById('rejectCall');
         const callStatus = document.getElementById('callStatus');
 
-        // Переменные состояния
+        // Состояние приложения
         let currentCallerId = null;
         let peerConnection = null;
         let localStream = null;
         let callStartTime = null;
         let callTimer = null;
+        let isCallActive = false;
 
-        // ICE серверы для WebRTC
+        // Конфигурация WebRTC
         const servers = {
             iceServers: [
-                { urls: "stun:stun.l.google.com:19302" }
+                { urls: "stun:stun.l.google.com:19302" },
+                { 
+                    urls: "turn:your-turn-server.com",
+                    username: "username",
+                    credential: "password"
+                }
             ]
         };
 
-        // Подключение к комнате
+        // Инициализация соединения
         socket.emit('join', { user_id: userId });
 
-        // Отправка сообщений
+        // Обработчики сообщений
         sendBtn.onclick = () => {
             const message = messageInput.value.trim();
             if (message) {
@@ -93,12 +99,9 @@
         };
 
         messageInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                sendBtn.click();
-            }
+            if (e.key === 'Enter') sendBtn.click();
         });
 
-        // Получение сообщений
         socket.on('receive_message', data => {
             const div = document.createElement('div');
             div.className = 'chat ' + (data.user_id === userId ? 'you' : 'them');
@@ -107,54 +110,140 @@
             chatBox.scrollTop = chatBox.scrollHeight;
         });
 
-        // Инициализация звонка
-        callButton.onclick = () => {
+        // Логика звонков
+        callButton.onclick = async () => {
+            if (isCallActive) return;
+            
             callStatus.textContent = "Calling...";
             callButton.disabled = true;
-            socket.emit('request_call', { to: recipientId });
+            
+            try {
+                // Получаем доступ к микрофону
+                localStream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+                
+                // Создаем PeerConnection
+                peerConnection = new RTCPeerConnection(servers);
+                
+                // Добавляем локальный поток
+                localStream.getTracks().forEach(track => {
+                    peerConnection.addTrack(track, localStream);
+                });
+
+                // Обработка ICE кандидатов
+                peerConnection.onicecandidate = ({ candidate }) => {
+                    if (candidate) {
+                        socket.emit('ice_candidate', { 
+                            candidate, 
+                            to: recipientId 
+                        });
+                    }
+                };
+
+                // Получение удаленного потока
+                peerConnection.ontrack = ({ streams }) => {
+                    remoteAudio.srcObject = streams[0];
+                    isCallActive = true;
+                    startCallTimer();
+                };
+
+                // Создаем предложение
+                const offer = await peerConnection.createOffer({
+                    offerToReceiveAudio: true
+                });
+                
+                await peerConnection.setLocalDescription(offer);
+                
+                // Отправляем запрос на звонок
+                socket.emit('request_call', { 
+                    to: recipientId,
+                    offer: peerConnection.localDescription
+                });
+                
+            } catch (err) {
+                console.error("Call setup failed:", err);
+                resetCallState();
+                alert("Failed to start call. Please check your microphone permissions.");
+            }
         };
 
-        // Завершение звонка
-        hangupButton.onclick = () => {
-            endCall();
-            socket.emit('end_call', { to: recipientId });
-        };
-
-        // Обработка входящего вызова
+        // Входящий вызов
         socket.on('incoming_call', ({from, caller_name}) => {
+            if (isCallActive) {
+                socket.emit('call_response', {
+                    to: from,
+                    accepted: false,
+                    reason: "Already in call"
+                });
+                return;
+            }
+            
             currentCallerId = from;
             callerName.textContent = `Incoming call from ${caller_name}`;
             callModal.style.display = 'flex';
-            ringtone.play();
+            
+            // Воспроизводим рингтон с обработкой ошибок
+            ringtone.currentTime = 0;
+            ringtone.play().catch(e => {
+                console.log("Ringtone play error:", e);
+            });
         });
 
         // Принятие вызова
         acceptCall.onclick = async () => {
             callModal.style.display = 'none';
-            ringtone.pause();
+            stopRingtone();
             
             try {
-                localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                // Получаем доступ к микрофону
+                localStream = await navigator.mediaDevices.getUserMedia({ 
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+                
+                // Создаем PeerConnection
                 peerConnection = new RTCPeerConnection(servers);
                 
+                // Добавляем локальный поток
                 localStream.getTracks().forEach(track => {
                     peerConnection.addTrack(track, localStream);
                 });
 
+                // Обработка ICE кандидатов
                 peerConnection.onicecandidate = ({ candidate }) => {
                     if (candidate) {
-                        socket.emit('ice_candidate', { candidate, to: currentCallerId });
+                        socket.emit('ice_candidate', { 
+                            candidate, 
+                            to: currentCallerId 
+                        });
                     }
                 };
 
+                // Получение удаленного потока
                 peerConnection.ontrack = ({ streams }) => {
                     remoteAudio.srcObject = streams[0];
+                    isCallActive = true;
                     startCallTimer();
                 };
 
-                const offer = await peerConnection.createOffer();
-                await peerConnection.setLocalDescription(offer);
+                // Устанавливаем удаленное описание
+                await peerConnection.setRemoteDescription(
+                    new RTCSessionDescription(callOffer)
+                );
                 
+                // Создаем ответ
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                
+                // Отправляем ответ
                 socket.emit('call_response', {
                     to: currentCallerId,
                     accepted: true,
@@ -162,26 +251,41 @@
                 });
                 
                 updateCallUI(true);
+                
             } catch (err) {
                 console.error('Failed to accept call:', err);
-                alert('Error accepting call');
+                resetCallState();
+                alert('Error accepting call. Please try again.');
             }
         };
 
         // Отклонение вызова
         rejectCall.onclick = () => {
             callModal.style.display = 'none';
-            ringtone.pause();
+            stopRingtone();
+            
             socket.emit('call_response', {
                 to: currentCallerId,
-                accepted: false
+                accepted: false,
+                reason: "Call rejected by user"
             });
+            
+            resetCallState();
         };
 
-        // Обработка принятого вызова (для инициатора)
+        // Завершение звонка
+        hangupButton.onclick = () => {
+            socket.emit('end_call', { to: isCallActive ? recipientId : currentCallerId });
+            endCall();
+        };
+
+        // Обработчики событий WebRTC
         socket.on('call_accepted', async ({ answer }) => {
             try {
-                await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+                await peerConnection.setRemoteDescription(
+                    new RTCSessionDescription(answer)
+                );
+                isCallActive = true;
                 startCallTimer();
             } catch (err) {
                 console.error('Failed to set remote description:', err);
@@ -189,24 +293,22 @@
             }
         });
 
-        // Обработка отклоненного вызова
-        socket.on('call_rejected', () => {
-            callStatus.textContent = "Call rejected";
+        socket.on('call_rejected', ({ reason }) => {
+            callStatus.textContent = `Call rejected: ${reason || 'No reason given'}`;
             setTimeout(() => callStatus.textContent = "", 3000);
-            updateCallUI(false);
+            resetCallState();
         });
 
-        // Обработка завершения звонка
         socket.on('call_ended', () => {
-            callStatus.textContent = "Call ended";
+            callStatus.textContent = "Call ended by other party";
             setTimeout(() => callStatus.textContent = "", 3000);
             endCall();
         });
 
-        // Обработка ICE кандидатов
         socket.on('ice_candidate', ({ candidate }) => {
-            if (peerConnection) {
-                peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            if (peerConnection && candidate) {
+                peerConnection.addIceCandidate(new RTCIceCandidate(candidate))
+                    .catch(e => console.error('Error adding ICE candidate:', e));
             }
         });
 
@@ -229,6 +331,12 @@
                 const seconds = duration % 60;
                 callStatus.textContent = `Call duration: ${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
             }, 1000);
+            updateCallUI(true);
+        }
+
+        function stopRingtone() {
+            ringtone.pause();
+            ringtone.currentTime = 0;
         }
 
         function endCall() {
@@ -236,17 +344,37 @@
                 peerConnection.close();
                 peerConnection = null;
             }
+            
             if (localStream) {
                 localStream.getTracks().forEach(track => track.stop());
                 localStream = null;
             }
+            
+            stopRingtone();
+            
             if (callTimer) {
                 clearInterval(callTimer);
                 callTimer = null;
             }
+            
             remoteAudio.srcObject = null;
+            isCallActive = false;
+            currentCallerId = null;
             updateCallUI(false);
         }
+
+        function resetCallState() {
+            endCall();
+            callModal.style.display = 'none';
+            callButton.disabled = false;
+        }
+
+        // Обработка закрытия страницы
+        window.addEventListener('beforeunload', () => {
+            if (isCallActive) {
+                socket.emit('end_call', { to: recipientId });
+            }
+        });
     </script>
 </body>
 </html>
