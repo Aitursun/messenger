@@ -2,66 +2,88 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chat with {{ other_user.username }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='chat.css') }}">
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 30px;
-        }
-        .chat-box {
-            border: 1px solid #ccc;
-            height: 300px;
-            overflow-y: auto;
-            padding: 10px;
-        }
-        .message {
-            margin: 5px 0;
-        }
-        .you {
-            text-align: right;
-            color: blue;
-        }
-        .them {
-            text-align: left;
-            color: green;
-        }
-    </style>
 </head>
 <body>
-    <h2>Chat with {{ other_user.username }}</h2>
-
-    <div class="chat-box" id="chatBox">
-        {% for message in messages %}
-            <div class="message {{ 'you' if message.sender_id == current_user.id else 'them' }}">
-                <strong>{{ message.sender.username }}:</strong> {{ message.body }}
-            </div>
-        {% endfor %}
+    <div class="text">
+        <h2>Chat with {{ other_user.username }}</h2>
+        <div class="chat-box" id="chatBox">
+            {% for message in messages %}
+                <div class="chat {{ 'you' if message.sender_id == current_user.id else 'them' }}">
+                    <strong>{{ message.sender.username }}:</strong> {{ message.body }}
+                </div>
+            {% endfor %}
+        </div>
+        
+        <div class="form">
+            <input type="text" id="messageInput" placeholder="Type your message..." autocomplete="off">
+            <button id="sendBtn">Send</button>
+        </div>
+        
+        <div class="call-buttons">
+            <button id="callButton">Call</button>
+            <button id="hangupButton" disabled>End Call</button>
+        </div>
+        <div id="callStatus" class="call-status"></div>
+        <audio id="remoteAudio" autoplay></audio>
     </div>
 
-    <input type="text" id="messageInput" placeholder="Type your message..." autocomplete="off">
-    <button id="sendBtn">Send</button>
-
-    <br><br>
-    <button id="callButton">Call</button>
-    <button id="hangupButton" disabled>Hang Up</button>
-    <audio id="remoteAudio" autoplay></audio>
+    <!-- Call modal -->
+    <div id="callModal" class="call-modal">
+        <div class="call-box">
+            <h3 id="callerName">Incoming call from </h3>
+            <audio id="ringtone" loop src="{{ url_for('static', filename='ringtone.mp3') }}"></audio>
+            <div class="call-buttons">
+                <button id="acceptCall">Accept</button>
+                <button id="rejectCall">Reject</button>
+            </div>
+        </div>
+    </div>
 
     <script>
+        // Правильное объявление переменных из Jinja2
         const socket = io();
-
-        const userId = {{ current_user.id }};
-        const recipientId = {{ other_user.id }};
-
+        const userId = Number('{{ current_user.id }}');
+        const recipientId = Number('{{ other_user.id }}');
+        
+        // Получение элементов DOM
         const chatBox = document.getElementById('chatBox');
         const messageInput = document.getElementById('messageInput');
         const sendBtn = document.getElementById('sendBtn');
+        const callButton = document.getElementById('callButton');
+        const hangupButton = document.getElementById('hangupButton');
+        const remoteAudio = document.getElementById('remoteAudio');
+        const callModal = document.getElementById('callModal');
+        const callerName = document.getElementById('callerName');
+        const ringtone = document.getElementById('ringtone');
+        const acceptCall = document.getElementById('acceptCall');
+        const rejectCall = document.getElementById('rejectCall');
+        const callStatus = document.getElementById('callStatus');
 
+        // Переменные состояния
+        let currentCallerId = null;
+        let peerConnection = null;
+        let localStream = null;
+        let callStartTime = null;
+        let callTimer = null;
+
+        // ICE серверы для WebRTC
+        const servers = {
+            iceServers: [
+                { urls: "stun:stun.l.google.com:19302" }
+            ]
+        };
+
+        // Подключение к комнате
         socket.emit('join', { user_id: userId });
 
+        // Отправка сообщений
         sendBtn.onclick = () => {
             const message = messageInput.value.trim();
-            if (message.length > 0) {
+            if (message) {
                 socket.emit('send_message', {
                     message: message,
                     recipient_id: recipientId
@@ -70,97 +92,161 @@
             }
         };
 
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendBtn.click();
+            }
+        });
+
+        // Получение сообщений
         socket.on('receive_message', data => {
             const div = document.createElement('div');
-            div.className = 'message ' + (data.user_id === userId ? 'you' : 'them');
+            div.className = 'chat ' + (data.user_id === userId ? 'you' : 'them');
             div.innerHTML = `<strong>${data.username}:</strong> ${data.message}`;
             chatBox.appendChild(div);
             chatBox.scrollTop = chatBox.scrollHeight;
         });
 
-        // === WebRTC CALL ===
-        let localStream;
-        let peerConnection;
-        const servers = {
-            iceServers: [
-                { urls: "stun:stun.l.google.com:19302" }
-            ]
-        };
-
-        const callButton = document.getElementById('callButton');
-        const hangupButton = document.getElementById('hangupButton');
-        const remoteAudio = document.getElementById('remoteAudio');
-
-        callButton.onclick = async () => {
+        // Инициализация звонка
+        callButton.onclick = () => {
+            callStatus.textContent = "Calling...";
             callButton.disabled = true;
-            hangupButton.disabled = false;
-
-            localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-            peerConnection = new RTCPeerConnection(servers);
-            localStream.getTracks().forEach(track => {
-                peerConnection.addTrack(track, localStream);
-            });
-
-            peerConnection.onicecandidate = ({ candidate }) => {
-                if (candidate) {
-                    socket.emit('ice_candidate', { candidate, to: recipientId });
-                }
-            };
-
-            peerConnection.ontrack = ({ streams }) => {
-                remoteAudio.srcObject = streams[0];
-            };
-
-            const offer = await peerConnection.createOffer();
-            await peerConnection.setLocalDescription(offer);
-            socket.emit('call_user', { offer, to: recipientId });
+            socket.emit('request_call', { to: recipientId });
         };
 
+        // Завершение звонка
         hangupButton.onclick = () => {
-            if (peerConnection) {
-                peerConnection.close();
-                peerConnection = null;
-            }
-            hangupButton.disabled = true;
-            callButton.disabled = false;
+            endCall();
+            socket.emit('end_call', { to: recipientId });
         };
 
-        socket.on('receive_call', async ({ offer, from }) => {
-            callButton.disabled = true;
-            hangupButton.disabled = false;
+        // Обработка входящего вызова
+        socket.on('incoming_call', ({from, caller_name}) => {
+            currentCallerId = from;
+            callerName.textContent = `Incoming call from ${caller_name}`;
+            callModal.style.display = 'flex';
+            ringtone.play();
+        });
 
-            localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            peerConnection = new RTCPeerConnection(servers);
-            localStream.getTracks().forEach(track => {
-                peerConnection.addTrack(track, localStream);
+        // Принятие вызова
+        acceptCall.onclick = async () => {
+            callModal.style.display = 'none';
+            ringtone.pause();
+            
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                peerConnection = new RTCPeerConnection(servers);
+                
+                localStream.getTracks().forEach(track => {
+                    peerConnection.addTrack(track, localStream);
+                });
+
+                peerConnection.onicecandidate = ({ candidate }) => {
+                    if (candidate) {
+                        socket.emit('ice_candidate', { candidate, to: currentCallerId });
+                    }
+                };
+
+                peerConnection.ontrack = ({ streams }) => {
+                    remoteAudio.srcObject = streams[0];
+                    startCallTimer();
+                };
+
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                
+                socket.emit('call_response', {
+                    to: currentCallerId,
+                    accepted: true,
+                    answer: peerConnection.localDescription
+                });
+                
+                updateCallUI(true);
+            } catch (err) {
+                console.error('Failed to accept call:', err);
+                alert('Error accepting call');
+            }
+        };
+
+        // Отклонение вызова
+        rejectCall.onclick = () => {
+            callModal.style.display = 'none';
+            ringtone.pause();
+            socket.emit('call_response', {
+                to: currentCallerId,
+                accepted: false
             });
+        };
 
-            peerConnection.onicecandidate = ({ candidate }) => {
-                if (candidate) {
-                    socket.emit('ice_candidate', { candidate, to: from });
-                }
-            };
-
-            peerConnection.ontrack = ({ streams }) => {
-                remoteAudio.srcObject = streams[0];
-            };
-
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-            const answer = await peerConnection.createAnswer();
-            await peerConnection.setLocalDescription(answer);
-            socket.emit('answer_call', { answer, to: from });
+        // Обработка принятого вызова (для инициатора)
+        socket.on('call_accepted', async ({ answer }) => {
+            try {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+                startCallTimer();
+            } catch (err) {
+                console.error('Failed to set remote description:', err);
+                endCall();
+            }
         });
 
-        socket.on('call_answered', async ({ answer }) => {
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+        // Обработка отклоненного вызова
+        socket.on('call_rejected', () => {
+            callStatus.textContent = "Call rejected";
+            setTimeout(() => callStatus.textContent = "", 3000);
+            updateCallUI(false);
         });
 
+        // Обработка завершения звонка
+        socket.on('call_ended', () => {
+            callStatus.textContent = "Call ended";
+            setTimeout(() => callStatus.textContent = "", 3000);
+            endCall();
+        });
+
+        // Обработка ICE кандидатов
         socket.on('ice_candidate', ({ candidate }) => {
             if (peerConnection) {
                 peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
             }
         });
+
+        // Вспомогательные функции
+        function updateCallUI(inCall) {
+            callButton.disabled = inCall;
+            hangupButton.disabled = !inCall;
+            if (inCall) {
+                callStatus.textContent = "Call in progress";
+            } else {
+                callStatus.textContent = "";
+            }
+        }
+
+        function startCallTimer() {
+            callStartTime = new Date();
+            callTimer = setInterval(() => {
+                const duration = Math.floor((new Date() - callStartTime) / 1000);
+                const minutes = Math.floor(duration / 60);
+                const seconds = duration % 60;
+                callStatus.textContent = `Call duration: ${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+            }, 1000);
+        }
+
+        function endCall() {
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            if (callTimer) {
+                clearInterval(callTimer);
+                callTimer = null;
+            }
+            remoteAudio.srcObject = null;
+            updateCallUI(false);
+        }
     </script>
 </body>
 </html>

@@ -1,5 +1,4 @@
 import os
-
 from flask import Flask, render_template, redirect, request, url_for
 from flask_socketio import SocketIO, emit, join_room
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
@@ -11,15 +10,13 @@ app = Flask(__name__)
 app.config.from_object(Config)
 
 db.init_app(app)
-socketio = SocketIO(app, async_mode='eventlet')  # render-friendly
+socketio = SocketIO(app, async_mode='eventlet', cors_allowed_origins="*")
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
-
 
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
-
 
 def get_chat_partners(user_id):
     sent = db.session.query(Message.recipient_id).filter(Message.sender_id == user_id)
@@ -28,13 +25,11 @@ def get_chat_partners(user_id):
     ids = [uid[0] for uid in user_ids]
     return User.query.filter(User.id.in_(ids)).all()
 
-
 @socketio.on('join')
 def on_join(data):
     user_id = data['user_id']
     room = f"user_{user_id}"
     join_room(room)
-
 
 @socketio.on('send_message')
 def handle_send_message(data):
@@ -53,21 +48,51 @@ def handle_send_message(data):
         'user_id': sender_id,
         'message': content
     }
+    emit('receive_message', payload, room=f"user_{recipient_id}")
+    emit('receive_message', payload, room=f"user_{sender_id}")
 
-    # Отправка получателю
-    recipient_room = f"user_{recipient_id}"
-    emit('receive_message', payload, room=recipient_room)
+# Новая логика звонков
+@socketio.on('request_call')
+def handle_call_request(data):
+    recipient_id = data['to']
+    caller = User.query.get(current_user.id)
+    emit('incoming_call', {
+        'from': current_user.id,
+        'caller_name': caller.username
+    }, room=f"user_{recipient_id}")
 
-    # Отправка отправителю
-    sender_room = f"user_{sender_id}"
-    emit('receive_message', payload, room=sender_room)
+@socketio.on('call_response')
+def handle_call_response(data):
+    recipient_id = data['to']
+    if data['accepted']:
+        emit('call_accepted', {
+            'from': current_user.id,
+            'answer': data['answer']
+        }, room=f"user_{recipient_id}")
+    else:
+        emit('call_rejected', {
+            'from': current_user.id
+        }, room=f"user_{recipient_id}")
 
+@socketio.on('end_call')
+def handle_end_call(data):
+    recipient_id = data['to']
+    emit('call_ended', {
+        'from': current_user.id
+    }, room=f"user_{recipient_id}")
 
+@socketio.on('ice_candidate')
+def handle_ice_candidate(data):
+    recipient_id = data['to']
+    emit('ice_candidate', {
+        'candidate': data['candidate'],
+        'from': current_user.id
+    }, room=f"user_{recipient_id}")
 
+# Маршруты
 @app.route('/')
 def index():
     return redirect(url_for('login'))
-
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -80,7 +105,6 @@ def register():
         return redirect(url_for('login'))
     return render_template('register.html')
 
-
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -90,48 +114,11 @@ def login():
             return redirect(url_for('chat'))
     return render_template('login.html')
 
-
 @app.route('/logout')
 @login_required
 def logout():
     logout_user()
     return redirect(url_for('login'))
-
-@socketio.on('call_user')
-def call_user(data):
-    recipient_id = data['to']
-    room = f"user_{recipient_id}"
-    emit('receive_call', {
-        'offer': data['offer'],
-        'from': current_user.id
-    }, room=room)
-
-
-
-
-
-@socketio.on('answer_call')
-def answer_call(data):
-    recipient_id = data['to']
-    room = f"user_{recipient_id}"
-    emit('call_answered', {
-        'answer': data['answer']
-    }, room=room)
-
-
-@socketio.on('ice_candidate')
-def handle_ice_candidate(data):
-    recipient_id = data['to']
-    room = f"user_{recipient_id}"
-    emit('ice_candidate', {
-        'candidate': data['candidate']
-    }, room=room)
-
-
-
-
-
-
 
 @app.route('/chat')
 @login_required
@@ -139,19 +126,15 @@ def chat():
     chat_partners = get_chat_partners(current_user.id)
     return render_template('chat_list.html', chat_partners=chat_partners)
 
-
 @app.route('/chat/<int:user_id>', methods=['GET'])
 @login_required
 def chat_with_user(user_id):
     other_user = User.query.get_or_404(user_id)
-
     messages = Message.query.filter(
         ((Message.sender_id == current_user.id) & (Message.recipient_id == user_id)) |
         ((Message.sender_id == user_id) & (Message.recipient_id == current_user.id))
     ).order_by(Message.timestamp.asc()).all()
-
     return render_template('chat.html', other_user=other_user, messages=messages)
-
 
 @app.route('/users')
 @login_required
@@ -159,11 +142,7 @@ def users_list():
     users = User.query.filter(User.id != current_user.id).all()
     return render_template('users.html', users=users)
 
-
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    socketio.run(app, 
-                host='0.0.0.0',  
-                port=int(os.environ.get('PORT', 5000)),  
-                debug=False) 
+    socketio.run(app, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)

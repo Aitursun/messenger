@@ -6,17 +6,21 @@ body {
     width: 600px;
     margin: 120px auto;
 }
+
 .chat-box {
     border: 1px solid #ccc;
     padding: 10px;
     margin: 20px;
     background-color: white;
+    max-height: 500px;
+    overflow-y: auto;
 }
-.form{
+
+.form {
     margin: 40px auto;
 }
 
-.form button{
+.form button {
     margin: 24px 0;
     display: block;
     font-size: 16px;
@@ -26,8 +30,15 @@ body {
     padding: 8px 16px;
     border: none;
     background-color: #685BC7;
+    cursor: pointer;
+    transition: background-color 0.3s;
 }
-.form input{
+
+.form button:hover {
+    background-color: #5749b6;
+}
+
+.form input {
     border: none;
     margin: 24px 0;
     display: block;
@@ -39,25 +50,130 @@ body {
     background-color: #F3F0EB;
 }
 
-.text{
+.text {
     width: 600px;
     margin: 0 auto;
 }
-.text p{
+
+.text p {
     text-align: center;
 }
-.text h2{
+
+.text h2 {
     font-size: 32px;
     margin: 20px 0;
+    color: #685BC7;
 }
-.chat{
+
+.chat {
     background-color: rgba(104, 91, 199, 0.25);
     padding: 25px;
     margin: 12px 0;
     border-radius: 25px;
 }
-.chat-box{
-    margin-top: 32px;
-    padding: 12px 0;
-    border-top: 1px solid #685BC7;
+
+.chat.you {
+    background-color: rgba(104, 91, 199, 0.1);
+    border-left: 4px solid #685BC7;
+}
+
+.chat.them {
+    background-color: rgba(0, 0, 0, 0.05);
+    border-left: 4px solid #ccc;
+}
+
+.call-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    margin: 30px 0;
+}
+
+.call-buttons button {
+    padding: 12px 24px;
+    border-radius: 10px;
+    border: none;
+    font-size: 16px;
+    cursor: pointer;
+    transition: opacity 0.3s;
+}
+
+#callButton {
+    background-color: #685BC7;
+    color: white;
+}
+
+#hangupButton {
+    background-color: #F44336;
+    color: white;
+}
+
+.call-status {
+    margin-top: 20px;
+    font-weight: bold;
+    color: #685BC7;
+    text-align: center;
+    min-height: 24px;
+}
+
+.call-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.7);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+}
+
+.call-box {
+    background: white;
+    padding: 40px;
+    border-radius: 20px;
+    text-align: center;
+    width: 400px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+}
+
+.call-box h3 {
+    margin-bottom: 30px;
+    color: #685BC7;
+}
+
+#acceptCall {
+    background-color: #4CAF50;
+    color: white;
+    padding: 12px 24px;
+    border-radius: 10px;
+}
+
+#rejectCall {
+    background-color: #F44336;
+    color: white;
+    padding: 12px 24px;
+    border-radius: 10px;
+}
+
+#ringtone {
+    display: none;
+}
+
+/* Responsive styles */
+@media (max-width: 650px) {
+    body {
+        width: 90%;
+        margin: 60px auto;
+    }
+    
+    .text {
+        width: 100%;
+    }
+    
+    .call-box {
+        width: 80%;
+        padding: 20px;
+    }
 }
